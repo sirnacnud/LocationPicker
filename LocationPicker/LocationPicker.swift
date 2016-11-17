@@ -278,6 +278,10 @@ open class LocationPicker: UIViewController, UIGestureRecognizerDelegate {
      */
     public var isForceReverseGeocoding = false
     
+    /**
+     Whether to force reverse geocoding or not on map pan.
+     */
+    public var isForceReverseGeocodingOnMapPan = true
     
     /// `tableView.backgroundColor` is set to this property's value afte view is loaded. __Default__ is __`UIColor.whiteColor()`__
     public var tableViewBackgroundColor = #colorLiteral(red: 1, green: 1, blue: 1, alpha: 1)
@@ -668,12 +672,15 @@ open class LocationPicker: UIViewController, UIGestureRecognizerDelegate {
      Set the given LocationItem as the currently selected one. This will update the searchBar and show the map if possible.
      
      - parameter locationItem:      An instance of `LocationItem`
+     - parameter adjustMap:         Whether or not to adjust the map for the selected item
      */
-    public func selectLocationItem(_ locationItem: LocationItem) {
+    public func selectLocationItem(_ locationItem: LocationItem, adjustMap: Bool) {
         selectedLocationItem = locationItem
         searchBar.text = locationItem.name
         if let coordinate = locationItem.coordinate {
-            showMapView(withCenter: coordinateObject(fromTuple: coordinate), distance: longitudinalDistance)
+            if adjustMap {
+                showMapView(withCenter: coordinateObject(fromTuple: coordinate), distance: longitudinalDistance)
+            }
         } else {
             closeMapView()
         }
@@ -697,7 +704,7 @@ open class LocationPicker: UIViewController, UIGestureRecognizerDelegate {
             
             if !self.searchBar.isFirstResponder {
                 let mapItem = MKMapItem(placemark: MKPlacemark(placemark: placemark))
-                self.selectLocationItem(LocationItem(mapItem: mapItem))
+                self.selectLocationItem(LocationItem(mapItem: mapItem), adjustMap: true)
             }
         })
     }
@@ -1005,7 +1012,7 @@ extension LocationPicker: UITableViewDelegate, UITableViewDataSource {
             if (coordinate != nil && self.isForceReverseGeocoding) {
                 reverseGeocodeLocation(CLLocation(latitude: coordinate!.latitude, longitude: coordinate!.longitude))
             } else {
-                selectLocationItem(locationItem)
+                selectLocationItem(locationItem, adjustMap: true)
             }
         }
         
@@ -1047,12 +1054,20 @@ extension LocationPicker: MKMapViewDelegate {
         longitudinalDistance = getLongitudinalDistance(fromMapRect: mapView.visibleMapRect)
         if isMapViewCenterChanged {
             isMapViewCenterChanged = false
+            let coordinate: CLLocationCoordinate2D
             if #available(iOS 10, *) {
-                let coordinate = mapView.centerCoordinate
+                coordinate = mapView.centerCoordinate
+            } else {
+                coordinate = gcjToWgs(coordinate: mapView.centerCoordinate)
+            }
+            if isForceReverseGeocodingOnMapPan {
                 reverseGeocodeLocation(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
             } else {
-                let adjustedCoordinate = gcjToWgs(coordinate: mapView.centerCoordinate)
-                reverseGeocodeLocation(CLLocation(latitude: adjustedCoordinate.latitude, longitude: adjustedCoordinate.longitude))
+                let placemark = MKPlacemark(coordinate: coordinate, addressDictionary: nil)
+                if !searchBar.isFirstResponder {
+                    let mapItem = MKMapItem(placemark: MKPlacemark(placemark: placemark))
+                    selectLocationItem(LocationItem(mapItem: mapItem), adjustMap: false)
+                }
             }
         }
         
